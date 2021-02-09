@@ -32,7 +32,7 @@ You can specify some options at the command line:
 
     ./osm-history-importer --nodestore sparse --debug --prefix "hist_" --dsn "host='172.16.0.73' dbname='histtest'" gau-odernheim.osh.pbf
 
-See the [libpq documentation](http://www.postgresql.org/docs/8.1/static/libpq.html#LIBPQ-CONNECT) for a detailed descriptions of the dsn parameters. Beware: the importer does *not* honor relations right now, so no multipolygon-areas or routes in the database.
+See the [libpq documentation](http://www.postgresql.org/docs/8.1/static/libpq.html#LIBPQ-CONNECT) for a detailed descriptions of the dsn parameters. Beware: the importer does *not* honor relations right now, so no multipolygon-areas or routes in the database. Relations are imported for historical purposes, but not postprocessed.
 
 After the import is completed, you can use the render.py and render-animation.py in the "rendering" directory. They work on regular osm carto styles, so you need to follow the usual preparations for those styles:
 

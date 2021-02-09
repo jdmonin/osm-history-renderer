@@ -27,6 +27,7 @@
 #include "polygonidentifyer.hpp"
 #include "zordercalculator.hpp"
 #include "hstore.hpp"
+#include "pgarray.hpp"
 #include "timestamp.hpp"
 #include "geombuilder.hpp"
 #include "minortimescalculator.hpp"
@@ -39,6 +40,7 @@ private:
     Osmium::Handler::Progress m_progress;
     EntityTracker<Osmium::OSM::Node> m_node_tracker;
     EntityTracker<Osmium::OSM::Way> m_way_tracker;
+    EntityTracker<Osmium::OSM::Relation> m_relation_tracker;
 
     Nodestore *m_store;
     DbAdapter m_adapter;
@@ -47,7 +49,7 @@ private:
     SortTest m_sorttest;
 
     DbConn m_general;
-    DbCopyConn m_point, m_line, m_polygon;
+    DbCopyConn m_point, m_line, m_polygon, m_rels;
 
     geos::io::WKBWriter wkb;
 
@@ -365,6 +367,131 @@ private:
         delete geom;
     }
 
+    void write_relation() {
+        const shared_ptr<Osmium::OSM::Relation const> next = m_relation_tracker.next();
+        const shared_ptr<Osmium::OSM::Relation const> cur = m_relation_tracker.cur();
+
+        if(m_debug) {
+            std::cout << "relation r" << cur->id() << 'v' << cur->version() << " at tstamp " << cur->timestamp() << " (" << Timestamp::format(cur->timestamp()) << ")" << std::endl;
+        }
+
+        std::string valid_from(cur->timestamp_as_string());
+        std::string valid_to("\\N");
+
+        // if this is another version of the same entity, the end-timestamp of the current entity is the timestamp of the next one
+        if(m_relation_tracker.next_is_same_entity()) {
+            valid_to = next->timestamp_as_string();
+        }
+
+        // if the current version is deleted, it's end-timestamp is the same as its creation-timestamp
+        else if(!cur->visible()) {
+            valid_to = valid_from;
+        }
+
+        m_username_map.insert( username_pair_t(cur->uid(), std::string(cur->user()) ) );
+
+        const Osmium::OSM::RelationMemberList& memberList = cur->members();
+        const int numMembers = memberList.size();
+
+        // Will output parts and members arranged nodes first, then ways, then rels
+        std::vector<osm_object_id_t> parts;
+        parts.reserve(numMembers);
+        std::vector<Osmium::OSM::RelationMember> members;
+        members.reserve(numMembers);
+
+        // Count nodes, ways, rels; see if they're already sorted the way we want
+        int numNodes = 0, numWays = 0, numRels = 0;
+        char prevType = 'n';  // for NODE
+        bool allSorted = true, typeUnknown = false;
+        for (int i = 0; i < numMembers; ++i) {
+            const Osmium::OSM::RelationMember member = memberList[i];
+            const char membType = member.type();
+
+            switch (membType) {
+                case 'n':
+                    if (allSorted && (prevType != 'n'))
+                        allSorted = false;
+                    ++numNodes;
+                    break;
+                case 'w':
+                    if (allSorted && (prevType != 'w') && ! ((numWays == 0) && (prevType == 'n')))
+                        allSorted = false;
+                    ++numWays;
+                    break;
+                case 'r':
+                    if (allSorted && (prevType != 'r') && (numWays != 0))
+                        allSorted = false;
+                    ++numRels;
+                    break;
+                default:
+                    typeUnknown = true;
+                    std::cerr
+                        << "Warning: Not importing relation id " << cur->id() << " v " << cur->version()
+                        << ": contains unknown item type " << membType << " having ref id " << member.ref()
+                        << std::endl;
+                    return;  // <--- Early return: won't import this relation ---
+            }
+            prevType = membType;
+            if (allSorted) {
+                parts.push_back(member.ref());
+                members.push_back(member);
+            }
+        }
+
+        if (! allSorted) {
+            parts.clear();
+            parts.resize(numMembers);
+            members.clear();
+            members.resize(numMembers);
+
+            // place all nodes at start of vectors,
+            // then all ways after nodes (start at index numNodes),
+            // then all relations after nodes and ways (start at numNodes + numWays)
+
+            int nodeIdx = 0, wayIdx = numNodes, relIdx = numNodes + numWays;
+            for (int i = 0; i < numMembers; ++i) {
+                const Osmium::OSM::RelationMember member = memberList[i];
+                int idx;
+                switch (member.type()) {
+                    case 'n':
+                        idx = nodeIdx;
+                        ++nodeIdx;
+                        break;
+                    case 'w':
+                        idx = wayIdx;
+                        ++wayIdx;
+                        break;
+                    case 'r':
+                        idx = relIdx;
+                        ++relIdx;
+                        break;
+                }
+                parts.at(idx) = member.ref();
+                members.at(idx) = member;
+            }
+        }
+
+        // SPEED: sum up 64k of data, before sending them to the database
+        // SPEED: instead of stringstream, which does dynamic allocation, use a fixed buffer and snprintf
+        std::stringstream rel;
+        rel <<
+            cur->id() << '\t' <<
+            cur->version() << '\t' <<
+            (cur->visible() ? 't' : 'f') << '\t' <<
+            cur->uid() << '\t' <<
+            DbCopyConn::escape_string(cur->user()) << '\t' <<
+            valid_from << '\t' <<
+            valid_to << '\t' <<
+            numNodes << '\t' <<   // way_off
+            (numNodes + numWays) << '\t' <<   // rel_off
+            PgArray::format(parts) << '\t' <<
+            PgArray::format(members) << '\t' <<
+            PgArray::format(cur->tags());
+
+        rel << '\n';
+        m_rels.copy(rel.str());
+    }
+
 public:
     ImportHandler(Nodestore *nodestore):
             m_progress(),
@@ -455,6 +582,7 @@ public:
         m_point.open(m_dsn, m_prefix, "point");
         m_line.open(m_dsn, m_prefix, "line");
         m_polygon.open(m_dsn, m_prefix, "polygon");
+        m_rels.open(m_dsn, m_prefix, "rels");
 
         m_progress.init(meta);
 
@@ -474,6 +602,9 @@ public:
 
         std::cerr << "closing polygon-table..." << std::endl;
         m_polygon.close();
+
+        std::cerr << "closing relations-table..." << std::endl;
+        m_rels.close();
 
         if(m_debug) {
             std::cerr << "running scheme/99-after.sql" << std::endl;
@@ -536,6 +667,27 @@ public:
         }
 
         m_way_tracker.swap();
+    }
+
+    void relation(const shared_ptr<Osmium::OSM::Relation const>& rel) {
+        m_sorttest.test(rel);
+        m_relation_tracker.feed(rel);
+
+        // we're always writing the one-off relation
+        if(m_relation_tracker.has_cur()) {
+            write_relation();
+        }
+
+        m_relation_tracker.swap();
+        m_progress.relation(rel);
+    }
+
+    void after_relations() {
+        if(m_relation_tracker.has_cur()) {
+            write_relation();
+        }
+
+        m_relation_tracker.swap();
     }
 };
 

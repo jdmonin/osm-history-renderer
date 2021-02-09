@@ -110,3 +110,20 @@ SELECT AddGeometryColumn(
     -- dimensions
     2
 );
+
+DROP TABLE IF EXISTS hist_rels CASCADE;
+CREATE TABLE hist_rels (
+    id bigint,
+    version smallint,
+    visible boolean,
+    user_id integer,
+    user_name text,
+    valid_from timestamp without time zone,
+    valid_to timestamp without time zone,
+    way_off smallint,
+    rel_off smallint,
+    parts bigint[],
+    members text[],
+    tags text[]  -- same field type as in main OSM schema; not sure why isn't hstore
+);
+
