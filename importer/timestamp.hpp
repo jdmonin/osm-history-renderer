@@ -47,6 +47,14 @@ public:
     }
 
     /**
+     * Format the Timestamp according to
+     * ISO timestamp string yyyy-mm-ddThh:mm:ssZ\0
+     */
+    static std::string format(osmium::Timestamp timeTS) {
+        return format(timeTS.seconds_since_epoch());
+    }
+
+    /**
      * the timestamp 0 has a special meaning in the context of osm data.
      * in 1970 there was no osm. For a valid_to value, where this method
      * is used for, a timestamp of 0 is identical to "never" (as in: at

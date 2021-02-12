@@ -21,18 +21,18 @@ protected:
     GeomBuilder(Nodestore *nodestore, DbAdapter *adapter, bool isUpdate): m_nodestore(nodestore), m_adapter(adapter), m_isupdate(isUpdate), m_debug(false), m_showerrors(false) {}
 
 public:
-    geos::geom::Geometry* forWay(const Osmium::OSM::WayNodeList &nodes, time_t t, bool looksLikePolygon) {
+    geos::geom::Geometry* forWay(const osmium::WayNodeList &nodes, time_t t, bool looksLikePolygon) {
         // shorthand to the geometry factory
-        geos::geom::GeometryFactory *f = Osmium::Geometry::geos_geometry_factory();
+        geos::geom::GeometryFactory *f = osmium::Geometry::geos_geometry_factory();
 
         // pointer to coordinate vector
         std::vector<geos::geom::Coordinate> *c = new std::vector<geos::geom::Coordinate>();
 
         // iterate over all nodes
-        Osmium::OSM::WayNodeList::const_iterator end = nodes.end();
-        for(Osmium::OSM::WayNodeList::const_iterator it = nodes.begin(); it != end; ++it) {
+        osmium::WayNodeList::const_iterator end = nodes.end();
+        for(osmium::WayNodeList::const_iterator it = nodes.begin(); it != end; ++it) {
             // the id
-            osm_object_id_t id = it->ref();
+            osmium::object_id_type id = it->ref();
 
             // was the node found in the store?
             bool found;

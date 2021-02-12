@@ -8,14 +8,16 @@
  */
 
 #include <getopt.h>
+#include <iomanip>
+#include <iostream>
 
 #define OSMIUM_MAIN
 #define OSMIUM_WITH_PBF_INPUT
 #define OSMIUM_WITH_XML_INPUT
 #define OSMIUM_WITH_PBF_OUTPUT
 #define OSMIUM_WITH_XML_OUTPUT
-#include <osmium.hpp>
-#include <osmium/geometry/geos.hpp>
+#include <osmium/osm.hpp>
+// /// #include <osmium/geom/geos.hpp>  // JM TODO remove this line if not needed
 
 #include <geos/util/GEOSException.h>
 
@@ -132,7 +134,7 @@ int main(int argc, char *argv[]) {
     filename = argv[optind];
 
     // open the input-file
-    Osmium::OSMFile infile(filename);
+    osmium::io::File infile(filename);
 
     // create an instance of the import-handler
     Nodestore *store;
@@ -157,7 +159,11 @@ int main(int argc, char *argv[]) {
     handler.keepLatLng(keepLatLng);
 
     // read the input-file to the handler
-    Osmium::Input::read(infile, handler);
+    // TODO manually call or not? handler.init();
+    osmium::io::Reader reader(infile);
+    osmium::apply(reader, handler);
+    // TODO manually call or not? handler.final();
+    reader.close();
 
     delete store;
 

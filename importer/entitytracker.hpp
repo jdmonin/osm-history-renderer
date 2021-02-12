@@ -25,37 +25,37 @@ private:
     /**
      * pointer to the current entity
      */
-    shared_ptr<TObject const> m_prev;
+    std::shared_ptr<TObject const> m_prev;
 
     /**
      * pointer to the current entity
      */
-    shared_ptr<TObject const> m_cur;
+    std::shared_ptr<TObject const> m_cur;
 
     /**
      * pointer to the next entity
      */
-    shared_ptr<TObject const> m_next;
+    std::shared_ptr<TObject const> m_next;
 
 public:
     /**
      * get the pointer to the previous entity
      */
-    const shared_ptr<TObject const> prev() {
+    const std::shared_ptr<TObject const> prev() {
         return m_prev;
     }
 
     /**
      * get the pointer to the current entity
      */
-    const shared_ptr<TObject const> cur() {
+    const std::shared_ptr<TObject const> cur() {
         return m_cur;
     }
 
     /**
      * get the pointer to the next entity
      */
-    const shared_ptr<TObject const> next() {
+    const std::shared_ptr<TObject const> next() {
         return m_next;
     }
 
@@ -103,7 +103,7 @@ public:
      * assertation error, because the next enity needs to be swapped
      * away using the swap-method below, before feeding in a new one.
      */
-    void feed(const shared_ptr<TObject const> obj) {
+    void feed(const std::shared_ptr<TObject const> obj) {
         assert(!m_next);
         m_next = obj;
     }
